@@ -330,6 +330,36 @@
     <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
     <script>
+        // ══════════════════════════════════════════════════
+        // Payme / Click checkout links
+        // These IDs are PUBLIC (not the secret API key) — safe to
+        // keep in front-end code. Fill them in once you're registered
+        // as a merchant, and the "Оплатить" buttons will start working.
+        // ══════════════════════════════════════════════════
+        const PAYME_MERCHANT_ID = "";           // Cashbox ID from business.payme.uz
+        const CLICK_MERCHANT_ID = "";           // Merchant ID from merchant.click.uz
+        const CLICK_SERVICE_ID = "";            // Service ID from merchant.click.uz
+        const USD_TO_UZS_RATE = 12800;          // Update to the current rate — Payme/Click charge in UZS
+        const RETURN_URL = window.location.origin + window.location.pathname.replace('payment.html', 'index.html');
+
+        function buildPaymeLink(amountUsd, orderId) {
+            const amountTiyin = Math.round(amountUsd * USD_TO_UZS_RATE * 100);
+            const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};c=${encodeURIComponent(RETURN_URL)}`;
+            return `https://checkout.paycom.uz/${btoa(params)}`;
+        }
+
+        function buildClickLink(amountUsd, orderId) {
+            const amountUzs = Math.round(amountUsd * USD_TO_UZS_RATE);
+            const params = new URLSearchParams({
+                service_id: CLICK_SERVICE_ID,
+                merchant_id: CLICK_MERCHANT_ID,
+                amount: amountUzs,
+                transaction_param: orderId,
+                return_url: RETURN_URL
+            });
+            return `https://my.click.uz/services/pay?${params.toString()}`;
+        }
+
         function updateAmount() {
             const courseSelect = document.getElementById('payCourse');
             const amountInput = document.getElementById('payAmount');
@@ -357,6 +387,7 @@
             const course = document.getElementById('payCourse').value;
             const amount = document.getElementById('payAmount').value;
             const method = document.getElementById('payMethod').value;
+            const orderId = 'TS' + Date.now();
 
             fetch('https://formspree.io/f/mqennban', {
                 method: 'POST',
@@ -366,6 +397,7 @@
                 },
                 body: JSON.stringify({
                     lead_type: 'PAYMENT_REQUEST',
+                    order_id: orderId,
                     name: name,
                     phone: phone,
                     course: course,
@@ -377,6 +409,18 @@
             }).catch(err => {
                 console.error("Ad-blocker blocking Formspree: ", err);
             });
+
+            // If real merchant IDs are configured, send the person straight
+            // to Payme/Click to actually pay. Otherwise, fall back to the
+            // "we'll contact you" flow above.
+            if (method === 'payme' && PAYME_MERCHANT_ID) {
+                window.location.href = buildPaymeLink(amount, orderId);
+                return;
+            }
+            if (method === 'click' && CLICK_SERVICE_ID && CLICK_MERCHANT_ID) {
+                window.location.href = buildClickLink(amount, orderId);
+                return;
+            }
 
             document.getElementById('successSummary').textContent = `Заявка на сумму $${amount} принята.`;
             document.getElementById('successModal').style.display = 'flex';
